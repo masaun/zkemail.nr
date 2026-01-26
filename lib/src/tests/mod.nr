@@ -156,9 +156,7 @@ mod header_field_access {
     #[test(should_fail_with = "Header field name does not match")]
     fn test_bad_body_hash_not_in_dkim_field() {
         // create header field for malicious bh
-        let mut dkim_field: BoundedVec<u8, EmailLarge::EMAIL_LARGE_MAX_HEADER_LENGTH> =
-            BoundedVec::new();
-        dkim_field.len = EmailLarge::HEADER.len();
+        let mut dkim_field_storage: [u8; EmailLarge::EMAIL_LARGE_MAX_HEADER_LENGTH] = [0; EmailLarge::EMAIL_LARGE_MAX_HEADER_LENGTH];
         // craft a malicious "to" field where attacker tries to put bh in display name
         let mut malicious_to: [u8; 78] = comptime {
             "\r\nto:\"bh=2JsdK4BMzzt9w4Zlz2TdyVCFc+l7vNyT5aAgGDYf7fM=;\" <zkewtest@gmail.com>\r\n"
@@ -170,8 +168,9 @@ mod header_field_access {
         };
         for i in 0..malicious_to.len() {
             let index = malicious_sequence.index + i - 2;
-            dkim_field.storage[index] = malicious_to[i];
+            dkim_field_storage[index] = malicious_to[i];
         }
+        let dkim_field = BoundedVec::from_parts(dkim_field_storage, EmailLarge::HEADER.len());
         let malicious_body_hash_index = 15;
         // copy the body hash to the beginning of the
         // attempt to get body hash
@@ -180,11 +179,11 @@ mod header_field_access {
 
     #[test]
     fn test_body_hash_at_start() {
-        let mut dkim_field: [u8; 203] = comptime {
+        let dkim_field: [u8; 203] = comptime {
             "dkim-signature:bh=2JsdK4BMzzt9w4Zlz2TdyVCFc+l7vNyT5aAgGDYf7fM=; v=1; a=rsa-sha256; c=relaxed/relaxed; d=icloud.com; s=1a1hai; t=1712141644; h=from:Content-Type:Mime-Version:Subject:Message-Id:Date:to; b="
                 .as_bytes()
         };
-        let header: BoundedVec<u8, 203> = BoundedVec { storage: dkim_field, len: 203 };
+        let header: BoundedVec<u8, 203> = BoundedVec::from_parts(dkim_field, 203);
         let mut dkim_field_sequence = Sequence { index: 0, length: 203 };
         let body_hash_index = 18;
         let _ = get_body_hash(header, dkim_field_sequence, body_hash_index);
@@ -204,8 +203,8 @@ mod header_field_access {
         let mut overflowed_sequence = EmailLarge::DKIM_HEADER_SEQUENCE;
         overflowed_sequence.length = overflowed_sequence.length + 1;
         // set header len to be a bit longer so it doesn't overflow
-        let mut longer_header = EmailLarge::HEADER;
-        longer_header.len = longer_header.len + 2;
+        let mut longer_header_storage = EmailLarge::HEADER.storage();
+        let longer_header = BoundedVec::from_parts(longer_header_storage, EmailLarge::HEADER.len() + 2);
         // attempt to get body hash
         let _ = get_body_hash(
             longer_header,
@@ -264,27 +263,23 @@ mod header_field_access {
                 + EmailLarge::DKIM_HEADER_SEQUENCE.length
                 + 2, // 2 for crlf in middle
         };
-        tampered_header.len = combined_sequence.length + 4;
         // copy dkim-signature field
         for i in 0..EmailLarge::DKIM_HEADER_SEQUENCE.length + 2 {
-            tampered_header.set(
-                i,
+            tampered_header.push(
                 EmailLarge::HEADER.get(EmailLarge::DKIM_HEADER_SEQUENCE.index + i - 2),
             );
         }
-        tampered_header.set(EmailLarge::DKIM_HEADER_SEQUENCE.length + 2, "\r".as_bytes()[0]);
-        tampered_header.set(EmailLarge::DKIM_HEADER_SEQUENCE.length + 3, "\n".as_bytes()[0]);
+        tampered_header.push("\r".as_bytes()[0]);
+        tampered_header.push("\n".as_bytes()[0]);
         // copy to field
         for i in 0..EmailLarge::TO_HEADER_SEQUENCE.length + 2 {
-            let index = EmailLarge::DKIM_HEADER_SEQUENCE.length + 4;
-            tampered_header.set(
-                index + i,
+            tampered_header.push(
                 EmailLarge::HEADER.get(EmailLarge::TO_HEADER_SEQUENCE.index + i),
             );
         }
         // set crlf at end
-        tampered_header.set(combined_sequence.length + 2, "\r".as_bytes()[0]);
-        tampered_header.set(combined_sequence.length + 3, "\n".as_bytes()[0]);
+        tampered_header.push("\r".as_bytes()[0]);
+        tampered_header.push("\n".as_bytes()[0]);
         let tampered_body_hash_index = 93; // just manually setting this
         // attempt to get body hash
         let _ = get_body_hash(tampered_header, combined_sequence, tampered_body_hash_index);
@@ -292,10 +287,12 @@ mod header_field_access {
 
     #[test(should_fail_with = "Header field out of bounds")]
     fn test_header_field_outside_header() {
-        let mut shortened_header = EmailLarge::HEADER;
+        let shortened_header_storage = EmailLarge::HEADER.storage();
         // shorten header to be just under the end of the dkim field
-        shortened_header.len =
-            EmailLarge::DKIM_HEADER_SEQUENCE.index + EmailLarge::DKIM_HEADER_SEQUENCE.length - 1;
+        let shortened_header = BoundedVec::from_parts(
+            shortened_header_storage,
+            EmailLarge::DKIM_HEADER_SEQUENCE.index + EmailLarge::DKIM_HEADER_SEQUENCE.length - 1
+        );
         // attempt to get body hash
         let _ = get_body_hash(
             shortened_header,

@@ -32,12 +32,12 @@ impl RSAPubkey<KEY_LIMBS_1024> {
             convert_field_to_u128(self.redc),
         );
 
-        let signature: RBN1024 =
+        let signature_bn: RBN1024 =
             RuntimeBigNum::from_array(params, convert_field_to_u128(signature));
-        signature.validate_in_range();
+        signature_bn.validate_in_range();
 
         // verify the DKIM signature over the header
-        assert(verify_sha256_pkcs1v15(header_hash, signature, RSA_EXPONENT));
+        assert(verify_sha256_pkcs1v15(header_hash, signature_bn, RSA_EXPONENT));
 
         header_hash
     }
@@ -85,12 +85,12 @@ impl RSAPubkey<KEY_LIMBS_2048> {
             convert_field_to_u128(self.redc),
         );
 
-        let signature: RBN2048 =
+        let signature_bn: RBN2048 =
             RuntimeBigNum::from_array(params, convert_field_to_u128(signature));
-        signature.validate_in_range();
+        signature_bn.validate_in_range();
 
         // verify the DKIM signature over the header
-        assert(verify_sha256_pkcs1v15(header_hash, signature, RSA_EXPONENT));
+        assert(verify_sha256_pkcs1v15(header_hash, signature_bn, RSA_EXPONENT));
 
         header_hash
     }
