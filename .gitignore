@@ -1,4 +1,3 @@
-node_modules
 target
 dist
 .tsbuildinfo
@@ -8,3 +7,9 @@ zk-email-verify
 
 # Generated Prover.toml examples
 examples/*/Prover.toml
+
+# Node modules
+node_modules/
+bun.lockb
+package-lock.json
+yarn.lock
