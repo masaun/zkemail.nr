@@ -121,6 +121,10 @@ const zkEmailInputs = await generateEmailVerifierInputs(emailContent, {
 
 ```
 
+### DKIM Subdomain Verification
+
+Some email providers sign messages with a DKIM `d=` domain that is a subdomain of the `From` header domain (e.g. `d=email.example.com` for a `From` of `example.com`) rather than an exact match, which would otherwise fail verification. `verifyDKIMSignature` and `generateEmailVerifierInputsFromDKIMResult` in the JS library account for this. See [js/doc/SPECIFIC_SUBDOMAIN_CHECK.md](./js/doc/SPECIFIC_SUBDOMAIN_CHECK.md) for details.
+
 ## Using ZKEmail.nr in EVM Smart Contracts
 TODO
 

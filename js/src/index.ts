@@ -8,7 +8,7 @@ import {
 } from "@zk-email/helpers";
 import {
   DKIMVerificationResult,
-  verifyDKIMSignature,
+  verifyDKIMSignature as verifyDKIMSignatureUpstream,
 } from "@zk-email/helpers/dist/dkim";
 import * as NoirBignum from "@mach-34/noir-bignum-paramgen";
 import {
@@ -19,10 +19,53 @@ import {
   BoundedVec,
 } from "./utils";
 
-export { verifyDKIMSignature } from "@zk-email/helpers/dist/dkim";
-
 // This file is essentially https://github.com/zkemail/zk-email-verify/blob/main/packages/helpers/src/input-generators.ts
 // modified for noir input generation
+
+/**
+ * @description Verify the DKIM signature of an email, retrying against the `email.` subdomain
+ * convention some providers use (e.g. signing as `d=email.example.com` for a `From` domain of
+ * `example.com`). @zk-email/helpers only exact-matches the signing domain, so those otherwise
+ * valid emails would fail verification. See:
+ * https://github.com/masaun/zk-email-verify/blob/specific-subdomain-check/packages/helpers/doc/SPECIFIC_SUBDOMAIN_CHECK.md
+ * @param email Entire email data as a string or buffer
+ * @param domain Domain to verify DKIM signature for. If not provided, the domain is extracted from the `From` header
+ * @param enableSanitization If true, email will be applied with various sanitization to try and pass DKIM verification
+ * @param fallbackToZKEmailDNSArchive If true, ZK Email DNS Archive (https://archive.prove.email/api-explorer) will
+ *                                    be used to resolve DKIM public keys if we cannot resolve from HTTP DNS
+ */
+export async function verifyDKIMSignature(
+  email: Buffer | string,
+  domain: string = "",
+  enableSanitization: boolean = true,
+  fallbackToZKEmailDNSArchive: boolean = false
+): Promise<DKIMVerificationResult> {
+  try {
+    return await verifyDKIMSignatureUpstream(
+      email,
+      domain,
+      enableSanitization,
+      fallbackToZKEmailDNSArchive
+    );
+  } catch (err) {
+    const notFoundMatch =
+      err instanceof Error &&
+      err.message.match(/^DKIM signature not found for domain (.+)$/);
+    if (!notFoundMatch) throw err;
+
+    // Only retry with the literal "email." prefix (not endsWith/pattern matching) to avoid
+    // domain-alignment bypasses via lookalike subdomains like "notemail.example.com".
+    const failedDomain = notFoundMatch[1];
+    if (failedDomain.startsWith("email.")) throw err;
+
+    return await verifyDKIMSignatureUpstream(
+      email,
+      `email.${failedDomain}`,
+      enableSanitization,
+      fallbackToZKEmailDNSArchive
+    );
+  }
+}
 
 export type CircuitInput = {
   // required inputs for all zkemail verifications
@@ -62,6 +105,8 @@ export type InputGenerationArgs = {
   // todo: probably move these out into a separate extended type?
   extractFrom?: boolean;
   extractTo?: boolean;
+  // if set, validates that the DKIM signing domain matches this domain (or its "email." subdomain)
+  expectedDomain?: string;
 };
 
 /** Formatted for BoundedVec in case used in other places */
@@ -120,7 +165,21 @@ export function generateEmailVerifierInputsFromDKIMResult(
   dkimResult: DKIMVerificationResult,
   params: InputGenerationArgs = {}
 ): CircuitInput {
-  const { headers, body, bodyHash, publicKey, signature, modulusLength } = dkimResult;
+  const { headers, body, bodyHash, publicKey, signature, modulusLength, signingDomain } = dkimResult;
+
+  if (params.expectedDomain) {
+    // Accept the DKIM signing domain matching the expected domain exactly, or via the literal
+    // "email." subdomain some providers use (e.g. `d=email.example.com` for `example.com`).
+    // Strict equality only (not endsWith/pattern matching) to avoid domain-alignment bypasses
+    // via lookalike subdomains like "notemail.example.com". See:
+    // https://github.com/masaun/zk-email-verify/blob/specific-subdomain-check/packages/helpers/doc/SPECIFIC_SUBDOMAIN_CHECK.md
+    const emailSubdomain = `email.${params.expectedDomain}`;
+    if (signingDomain !== params.expectedDomain && signingDomain !== emailSubdomain) {
+      throw new Error(
+        `DKIM signing domain "${signingDomain}" does not match expected domain "${params.expectedDomain}" (or its "email." subdomain)`
+      );
+    }
+  }
 
   // SHA add padding
   const [messagePadded] = sha256Pad(
