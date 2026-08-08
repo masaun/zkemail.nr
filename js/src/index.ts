@@ -33,19 +33,22 @@ import {
  * @param enableSanitization If true, email will be applied with various sanitization to try and pass DKIM verification
  * @param fallbackToZKEmailDNSArchive If true, ZK Email DNS Archive (https://archive.prove.email/api-explorer) will
  *                                    be used to resolve DKIM public keys if we cannot resolve from HTTP DNS
+ * @param skipBodyHash If true, bypass the DKIM body hash check
  */
 export async function verifyDKIMSignature(
   email: Buffer | string,
   domain: string = "",
   enableSanitization: boolean = true,
-  fallbackToZKEmailDNSArchive: boolean = false
+  fallbackToZKEmailDNSArchive: boolean = false,
+  skipBodyHash: boolean = false
 ): Promise<DKIMVerificationResult> {
   try {
     return await verifyDKIMSignatureUpstream(
       email,
       domain,
       enableSanitization,
-      fallbackToZKEmailDNSArchive
+      fallbackToZKEmailDNSArchive,
+      skipBodyHash
     );
   } catch (err) {
     const notFoundMatch =
@@ -62,7 +65,8 @@ export async function verifyDKIMSignature(
       email,
       `email.${failedDomain}`,
       enableSanitization,
-      fallbackToZKEmailDNSArchive
+      fallbackToZKEmailDNSArchive,
+      skipBodyHash
     );
   }
 }

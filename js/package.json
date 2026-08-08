@@ -16,7 +16,7 @@
     "@noir-lang/noir_js": "1.0.0-beta.6",
     "@noir-lang/noirc_abi": "^1.0.0-beta.6",
     "@types/circomlibjs": "^0.1.6",
-    "@zk-email/helpers": "^6.3.2",
+    "@zk-email/helpers": "^6.4.2",
     "circomlibjs": "^0.1.7"
   },
   "devDependencies": {

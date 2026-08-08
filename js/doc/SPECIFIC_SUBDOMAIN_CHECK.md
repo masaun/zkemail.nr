@@ -25,10 +25,11 @@ export async function verifyDKIMSignature(
   email: Buffer | string,
   domain: string = "",
   enableSanitization: boolean = true,
-  fallbackToZKEmailDNSArchive: boolean = false
+  fallbackToZKEmailDNSArchive: boolean = false,
+  skipBodyHash: boolean = false
 ): Promise<DKIMVerificationResult> {
   try {
-    return await verifyDKIMSignatureUpstream(email, domain, enableSanitization, fallbackToZKEmailDNSArchive);
+    return await verifyDKIMSignatureUpstream(email, domain, enableSanitization, fallbackToZKEmailDNSArchive, skipBodyHash);
   } catch (err) {
     const notFoundMatch =
       err instanceof Error && err.message.match(/^DKIM signature not found for domain (.+)$/);
@@ -41,11 +42,14 @@ export async function verifyDKIMSignature(
       email,
       `email.${failedDomain}`,
       enableSanitization,
-      fallbackToZKEmailDNSArchive
+      fallbackToZKEmailDNSArchive,
+      skipBodyHash
     );
   }
 }
 ```
+
+`skipBodyHash` is forwarded straight through to `@zk-email/helpers`'s `verifyDKIMSignature` (added upstream in `@zk-email/helpers@6.4.2`, hence the `js/package.json` bump from `^6.3.2`) — this wrapper previously declared only 4 params and dropped the 5th argument on both call sites, so callers had no way to reach it.
 
 ### `generateEmailVerifierInputsFromDKIMResult()`
 This function accepts an already-verified `DKIMVerificationResult` directly, so callers who fetch or cache a DKIM result independently of `verifyDKIMSignature` had no domain guarantee at all. An optional `expectedDomain` field was added to `InputGenerationArgs` to close that gap:
